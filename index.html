@@ -1,0 +1,953 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Story Input Generator — Zyantik</title>
+<style>
+  :root {
+    --brand:        #0d9488;
+    --brand-dark:   #0f766e;
+    --brand-light:  #f0fdfa;
+    --brand-border: #99f6e4;
+    --zinc-50:      #fafafa;
+    --zinc-100:     #f4f4f5;
+    --zinc-200:     #e4e4e7;
+    --zinc-300:     #d4d4d8;
+    --zinc-400:     #a1a1aa;
+    --zinc-500:     #71717a;
+    --zinc-600:     #52525b;
+    --zinc-700:     #3f3f46;
+    --zinc-900:     #18181b;
+    --amber-light:  #fffbeb;
+    --amber-border: #fde68a;
+    --amber:        #d97706;
+    --radius-sm:    4px;
+    --radius-md:    6px;
+    --radius-lg:    8px;
+    --radius-xl:    12px;
+  }
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    background: var(--zinc-50);
+    color: var(--zinc-900);
+    font-size: 13px;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+    min-height: 100vh;
+  }
+
+  /* ── Header ── */
+  .app-header {
+    background: white;
+    border-bottom: 1px solid var(--zinc-200);
+    padding: 0 32px;
+    height: 52px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    position: sticky;
+    top: 0;
+    z-index: 50;
+  }
+  .logo {
+    width: 30px; height: 30px;
+    background: var(--brand);
+    border-radius: var(--radius-md);
+    display: flex; align-items: center; justify-content: center;
+    flex-shrink: 0;
+  }
+  .logo svg { width: 16px; height: 16px; fill: white; }
+  .app-title   { font-size: 14px; font-weight: 600; color: var(--zinc-900); }
+  .app-divider { width: 1px; height: 18px; background: var(--zinc-200); }
+  .app-subtitle { font-size: 12px; color: var(--zinc-500); }
+  .hdr-settings-btn {
+    margin-left: auto;
+    display: flex; align-items: center; gap: 6px;
+    padding: 0 12px; height: 30px;
+    border: 1px solid var(--zinc-200); border-radius: var(--radius-md);
+    background: white; color: var(--zinc-600);
+    font-size: 12px; font-weight: 500; cursor: pointer;
+    font-family: inherit; transition: all 0.15s;
+  }
+  .hdr-settings-btn:hover { background: var(--zinc-50); border-color: var(--zinc-300); }
+  .hdr-settings-btn.active { background: var(--brand-light); border-color: var(--brand); color: var(--brand); }
+  .hdr-settings-btn svg { width: 14px; height: 14px; }
+
+  /* ── Settings bar ── */
+  .settings-bar {
+    background: white; border-bottom: 1px solid var(--zinc-200);
+    overflow: hidden; max-height: 0; transition: max-height 0.3s ease;
+  }
+  .settings-bar.open { max-height: 200px; }
+  .settings-bar-inner {
+    display: grid; grid-template-columns: 1fr 200px;
+    gap: 16px; align-items: end;
+    padding: 16px 32px; max-width: 1280px; margin: 0 auto;
+  }
+  .settings-status { display: flex; align-items: center; gap: 6px; margin-top: 6px; }
+  .settings-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--zinc-300); flex-shrink: 0; }
+  .settings-dot.ok  { background: #22c55e; }
+  .settings-dot.err { background: #ef4444; }
+  .settings-status-text { font-size: 11px; color: var(--zinc-500); }
+
+  /* ── Layout ── */
+  .page {
+    display: grid;
+    grid-template-columns: 1fr 420px;
+    gap: 24px;
+    padding: 24px 32px;
+    max-width: 1280px;
+    margin: 0 auto;
+  }
+
+  /* ── Cards ── */
+  .card {
+    background: white;
+    border: 1px solid var(--zinc-200);
+    border-radius: var(--radius-lg);
+    overflow: hidden;
+    margin-bottom: 16px;
+  }
+  .card-header {
+    padding: 12px 20px;
+    border-bottom: 1px solid var(--zinc-100);
+    display: flex; align-items: center; gap: 8px;
+  }
+  .card-header-icon {
+    width: 20px; height: 20px;
+    background: var(--brand-light);
+    border-radius: var(--radius-sm);
+    display: flex; align-items: center; justify-content: center;
+    flex-shrink: 0;
+  }
+  .card-header-icon svg { width: 12px; height: 12px; fill: var(--brand); }
+  .card-title { font-size: 12px; font-weight: 600; color: var(--zinc-900); }
+  .card-body  { padding: 16px 20px; }
+
+  /* ── Form elements ── */
+  .field { margin-bottom: 14px; }
+  .field:last-child { margin-bottom: 0; }
+  label {
+    display: block;
+    font-size: 11px; font-weight: 600;
+    color: var(--zinc-500);
+    text-transform: uppercase; letter-spacing: 0.05em;
+    margin-bottom: 6px;
+  }
+  input[type="text"], input[type="number"], textarea, select {
+    width: 100%;
+    padding: 8px 10px;
+    border: 1px solid var(--zinc-200); border-radius: var(--radius-md);
+    font-size: 13px; font-family: inherit;
+    color: var(--zinc-900); background: white;
+    transition: border-color 0.15s, box-shadow 0.15s;
+    appearance: none;
+  }
+  input[type="text"]:focus, textarea:focus, select:focus {
+    outline: none;
+    border-color: var(--brand);
+    box-shadow: 0 0 0 3px rgba(13,148,136,0.1);
+  }
+  textarea { resize: vertical; line-height: 1.6; }
+
+  /* ── Input type selector ── */
+  .type-selector { display: grid; grid-template-columns: repeat(3,1fr); gap: 8px; margin-bottom: 16px; }
+  .type-btn {
+    padding: 10px 8px;
+    border: 1px solid var(--zinc-200); border-radius: var(--radius-md);
+    background: white; cursor: pointer;
+    text-align: center; font-family: inherit;
+    transition: all 0.15s;
+    display: flex; flex-direction: column; align-items: center; gap: 5px;
+  }
+  .type-btn:hover { border-color: var(--brand); background: var(--brand-light); }
+  .type-btn.active { border-color: var(--brand); background: var(--brand-light); }
+  .type-btn svg { width: 20px; height: 20px; color: var(--zinc-400); }
+  .type-btn.active svg { color: var(--brand); }
+  .type-btn-label { font-size: 11px; font-weight: 600; color: var(--zinc-600); }
+  .type-btn.active .type-btn-label { color: var(--brand-dark); }
+  .type-btn-sub { font-size: 10px; color: var(--zinc-400); }
+
+  /* ── Input panels ── */
+  .input-panel { display: none; }
+  .input-panel.active { display: block; }
+
+  /* ── Drop zone ── */
+  .drop-zone {
+    border: 2px dashed var(--zinc-200); border-radius: var(--radius-md);
+    padding: 24px 16px; text-align: center; cursor: pointer;
+    transition: all 0.15s; position: relative; background: white;
+    min-height: 120px; display: flex; align-items: center;
+    justify-content: center; flex-direction: column; gap: 8px;
+  }
+  .drop-zone:hover, .drop-zone.drag-over { border-color: var(--brand); background: var(--brand-light); }
+  .drop-zone input[type="file"] { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
+  .drop-zone-icon svg { width: 28px; height: 28px; color: var(--zinc-300); }
+  .drop-zone-text { font-size: 12px; color: var(--zinc-500); pointer-events: none; }
+  .drop-zone-sub  { font-size: 11px; color: var(--zinc-400); pointer-events: none; }
+  .drop-zone-preview { max-height: 200px; width: 100%; object-fit: contain; border-radius: var(--radius-sm); display: none; }
+
+  /* ── Paste hint ── */
+  .paste-hint {
+    background: var(--brand-light); border: 1px solid var(--brand-border);
+    border-radius: var(--radius-md); padding: 8px 12px;
+    font-size: 11px; color: var(--brand-dark);
+    display: flex; align-items: center; gap: 8px; margin-bottom: 10px;
+  }
+  .paste-hint kbd {
+    background: white; border: 1px solid var(--brand-border);
+    border-radius: 3px; padding: 1px 5px;
+    font-size: 10px; font-family: inherit; font-weight: 600;
+  }
+
+  /* ── Scope selector ── */
+  .scope-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .scope-option {
+    padding: 10px 12px;
+    border: 1px solid var(--zinc-200); border-radius: var(--radius-md);
+    background: white; cursor: pointer; font-family: inherit;
+    transition: all 0.15s; text-align: left;
+  }
+  .scope-option:hover { border-color: var(--brand); background: var(--brand-light); }
+  .scope-option.active { border-color: var(--brand); background: var(--brand-light); }
+  .scope-option-title { font-size: 12px; font-weight: 600; color: var(--zinc-900); display: block; }
+  .scope-option.active .scope-option-title { color: var(--brand-dark); }
+  .scope-option-sub { font-size: 11px; color: var(--zinc-400); display: block; margin-top: 2px; }
+
+  /* ── Ticket slug ── */
+  .ticket-slug {
+    font-family: 'SF Mono', 'Fira Code', 'Courier New', monospace;
+    font-size: 12px; background: var(--zinc-50);
+    border: 1px solid var(--zinc-200); border-radius: var(--radius-md);
+    padding: 8px 12px; color: var(--brand); font-weight: 600;
+  }
+
+  /* ── Preview box ── */
+  .preview-panel { position: sticky; top: 76px; height: fit-content; }
+  .preview-box {
+    font-family: 'SF Mono', 'Fira Code', 'Courier New', monospace;
+    font-size: 11px; line-height: 1.7;
+    color: var(--zinc-600); white-space: pre-wrap; word-break: break-all;
+    max-height: 400px; overflow-y: auto; padding: 16px 20px;
+  }
+  .md-h1 { color: var(--zinc-900); font-weight: 700; font-size: 12px; }
+  .md-h2 { color: var(--brand); font-weight: 600; }
+
+  /* ── AI result ── */
+  .ai-result { border: 1px solid var(--zinc-200); border-radius: var(--radius-lg); overflow: hidden; display: none; }
+  .ai-result.visible { display: block; }
+  .ai-result-header { padding: 10px 16px; display: flex; align-items: center; gap: 8px; font-size: 12px; font-weight: 600; }
+  .ai-result-header.pass { background: #f0fdf4; border-bottom: 1px solid #bbf7d0; color: #166534; }
+  .ai-result-header.warn { background: var(--amber-light); border-bottom: 1px solid var(--amber-border); color: #92400e; }
+  .ai-result-header.err  { background: #fef2f2; border-bottom: 1px solid #fecaca; color: #991b1b; }
+  .ai-result-header svg  { width: 15px; height: 15px; flex-shrink: 0; }
+  .ai-result-body { padding: 14px 16px; background: white; }
+  .ai-score-row { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; padding-bottom: 12px; border-bottom: 1px solid var(--zinc-100); }
+  .ai-score-label { font-size: 11px; color: var(--zinc-500); font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; }
+  .ai-score-value { font-size: 22px; font-weight: 700; }
+  .ai-score-value.high { color: #16a34a; }
+  .ai-score-value.mid  { color: var(--amber); }
+  .ai-score-value.low  { color: #dc2626; }
+  .ai-issues { display: flex; flex-direction: column; gap: 6px; }
+  .ai-issue { display: flex; gap: 8px; align-items: flex-start; padding: 8px 10px; border-radius: var(--radius-md); font-size: 12px; line-height: 1.5; }
+  .ai-issue.issue      { background: var(--amber-light); color: #78350f; }
+  .ai-issue.suggestion { background: var(--zinc-50); color: var(--zinc-700); }
+  .ai-issue.ok         { background: #f0fdf4; color: #166534; }
+  .ai-issue-icon { font-size: 13px; flex-shrink: 0; margin-top: 1px; }
+  .ai-summary-text { font-size: 12px; color: var(--zinc-600); line-height: 1.6; margin-top: 10px; }
+
+  /* ── Buttons ── */
+  .actions { padding: 14px 20px; border-top: 1px solid var(--zinc-100); display: flex; gap: 8px; }
+  .btn {
+    padding: 8px 16px; border-radius: var(--radius-md);
+    font-size: 12px; font-weight: 600; cursor: pointer;
+    transition: all 0.15s; font-family: inherit;
+    display: flex; align-items: center; gap: 6px;
+    border: 1px solid var(--zinc-200); background: white; color: var(--zinc-600);
+  }
+  .btn:hover  { background: var(--zinc-50); border-color: var(--zinc-300); }
+  .btn:active { transform: scale(0.98); }
+  .btn svg { width: 14px; height: 14px; }
+  .btn-primary { background: var(--brand); color: white; border-color: var(--brand); justify-content: center; }
+  .btn-primary:hover { background: var(--brand-dark); border-color: var(--brand-dark); }
+  .btn-ai { background: #1d4ed8; color: white; border-color: #1d4ed8; justify-content: center; }
+  .btn-ai:hover { background: #1e40af; border-color: #1e40af; }
+  .btn-ai:disabled { opacity: 0.55; cursor: not-allowed; transform: none; }
+  .btn-wrap { position: relative; display: inline-flex; flex: 1; }
+  .btn-wrap .btn { width: 100%; }
+  .warn-badge {
+    position: absolute; top: -7px; right: -7px;
+    width: 17px; height: 17px; background: #f59e0b; color: white;
+    border-radius: 50%; font-size: 9px; font-weight: 700;
+    display: none; align-items: center; justify-content: center; z-index: 1;
+  }
+  .warn-badge.visible { display: flex; }
+  .spinner {
+    width: 13px; height: 13px;
+    border: 2px solid rgba(255,255,255,0.35); border-top-color: white;
+    border-radius: 50%; animation: spin 0.7s linear infinite; flex-shrink: 0;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* ── Toast ── */
+  .toast {
+    position: fixed; bottom: 24px; right: 24px;
+    background: var(--zinc-900); color: white;
+    padding: 10px 16px; border-radius: var(--radius-lg);
+    font-size: 12px; font-weight: 500;
+    opacity: 0; transform: translateY(8px);
+    transition: all 0.2s ease; pointer-events: none; z-index: 999;
+  }
+  .toast.show { opacity: 1; transform: translateY(0); }
+
+  /* ── Filename chips ── */
+  .filename-chips { display: flex; flex-direction: column; gap: 6px; padding: 12px 20px; border-top: 1px solid var(--zinc-100); }
+  .filename-chip {
+    display: flex; align-items: center; gap: 8px;
+    padding: 6px 10px; background: var(--zinc-50);
+    border: 1px solid var(--zinc-200); border-radius: var(--radius-md);
+    font-family: 'SF Mono', 'Fira Code', 'Courier New', monospace;
+    font-size: 11px; color: var(--zinc-600);
+  }
+  .chip-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+</style>
+</head>
+<body>
+
+<!-- Header -->
+<header class="app-header">
+  <div class="logo">
+    <svg viewBox="0 0 16 16"><path d="M2 2h5v5H2zM9 2h5v5H9zM2 9h5v5H2zM9 9h5v5H9z"/></svg>
+  </div>
+  <span class="app-title">Zyantik</span>
+  <div class="app-divider"></div>
+  <span class="app-subtitle">Story Input Generator</span>
+  <button class="hdr-settings-btn" id="settingsToggle" onclick="toggleSettings()">
+    <svg viewBox="0 0 16 16" fill="currentColor"><path d="M9.796 1.343c-.527-1.79-3.065-1.79-3.592 0l-.094.319a.873.873 0 01-1.255.52l-.292-.16c-1.64-.892-3.433.902-2.54 2.541l.159.292a.873.873 0 01-.52 1.255l-.319.094c-1.79.527-1.79 3.065 0 3.592l.319.094a.873.873 0 01.52 1.255l-.16.292c-.892 1.64.901 3.434 2.541 2.54l.292-.159a.873.873 0 011.255.52l.094.319c.527 1.79 3.065 1.79 3.592 0l.094-.319a.873.873 0 011.255-.52l.292.16c1.64.893 3.434-.902 2.54-2.541l-.159-.292a.873.873 0 01.52-1.255l.319-.094c1.79-.527 1.79-3.065 0-3.592l-.319-.094a.873.873 0 01-.52-1.255l.16-.292c.893-1.64-.902-3.433-2.541-2.54l-.292.159a.873.873 0 01-1.255-.52l-.094-.319zm-2.633.283a.873.873 0 011.674 0l.094.319a1.873 1.873 0 002.693 1.115l.291-.16a.873.873 0 011.198 1.198l-.16.292a1.873 1.873 0 001.116 2.692l.318.094a.873.873 0 010 1.674l-.319.094a1.873 1.873 0 00-1.115 2.693l.16.291a.873.873 0 01-1.198 1.198l-.292-.16a1.873 1.873 0 00-2.692 1.116l-.094.318a.873.873 0 01-1.674 0l-.094-.319a1.873 1.873 0 00-2.693-1.115l-.291.16a.873.873 0 01-1.198-1.198l.16-.292a1.873 1.873 0 00-1.116-2.692l-.318-.094a.873.873 0 010-1.674l.319-.094A1.873 1.873 0 003.06 4.377l-.16-.292a.873.873 0 011.198-1.198l.292.16a1.873 1.873 0 002.692-1.116l.094-.318zM8 5.754a2.246 2.246 0 100 4.492 2.246 2.246 0 000-4.492z"/></svg>
+    AI Settings
+  </button>
+</header>
+
+<!-- Settings bar -->
+<div class="settings-bar" id="settingsBar">
+  <div class="settings-bar-inner">
+    <div>
+      <div class="field" style="margin-bottom:8px">
+        <label>Anthropic API key</label>
+        <input type="password" id="apiKey" placeholder="sk-ant-..." oninput="saveSettings()" style="font-family:monospace;letter-spacing:0.05em">
+      </div>
+      <div class="settings-status">
+        <div class="settings-dot" id="settingsDot"></div>
+        <span class="settings-status-text" id="settingsStatusText">Enter your API key to enable AI quality check</span>
+      </div>
+    </div>
+    <div>
+      <label>Model</label>
+      <select id="modelSelect" onchange="saveSettings()">
+        <option value="claude-sonnet-4-5">Claude Sonnet 4.5 (recommended)</option>
+        <option value="claude-haiku-4-5-20251001">Claude Haiku 4.5 (faster)</option>
+        <option value="claude-opus-4-5">Claude Opus 4.5 (most thorough)</option>
+      </select>
+    </div>
+  </div>
+</div>
+
+<!-- Page -->
+<div class="page">
+
+  <!-- Left col -->
+  <div>
+
+    <!-- Request identity -->
+    <div class="card">
+      <div class="card-header">
+        <div class="card-header-icon">
+          <svg viewBox="0 0 16 16"><path d="M8 1a7 7 0 100 14A7 7 0 008 1zm0 2a5 5 0 110 10A5 5 0 018 3zm1 4H7V5h2v2zm0 5H7V8h2v3z"/></svg>
+        </div>
+        <span class="card-title">Request identity</span>
+      </div>
+      <div class="card-body">
+        <div style="display:grid;grid-template-columns:100px 1fr;gap:10px" class="field">
+          <div>
+            <label>Number</label>
+            <input type="number" id="reqNum" min="1" max="999" value="1" oninput="update()">
+          </div>
+          <div>
+            <label>Short title (use hyphens)</label>
+            <input type="text" id="reqTitle" placeholder="e.g. customer-onboarding" oninput="update()">
+          </div>
+        </div>
+        <div class="field">
+          <label>Generated filename</label>
+          <div class="ticket-slug" id="reqSlug">REQ-001-request.md</div>
+        </div>
+        <div class="field">
+          <label>Scope</label>
+          <div class="scope-grid">
+            <button class="scope-option active" id="scopeStory" onclick="setScope('story')">
+              <span class="scope-option-title">Single story</span>
+              <span class="scope-option-sub">One focused feature</span>
+            </button>
+            <button class="scope-option" id="scopeEpic" onclick="setScope('epic')">
+              <span class="scope-option-title">Let AI decide</span>
+              <span class="scope-option-sub">Epic if scope is large</span>
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Input type -->
+    <div class="card">
+      <div class="card-header">
+        <div class="card-header-icon">
+          <svg viewBox="0 0 16 16"><path d="M2 3h12v2H2V3zm0 4h12v2H2V7zm0 4h7v2H2v-2z"/></svg>
+        </div>
+        <span class="card-title">Requirement input</span>
+      </div>
+      <div class="card-body">
+
+        <!-- Type selector -->
+        <div class="type-selector">
+          <button class="type-btn active" id="typeBtnProcess" onclick="setType('process')">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><path d="M17.5 17.5l3 3M14 17.5h7"/></svg>
+            <span class="type-btn-label">Process map</span>
+            <span class="type-btn-sub">Image / diagram</span>
+          </button>
+          <button class="type-btn" id="typeBtnScreen" onclick="setType('screenshot')">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="4" width="20" height="14" rx="2"/><path d="M8 20h8M12 18v2"/></svg>
+            <span class="type-btn-label">Screenshot</span>
+            <span class="type-btn-sub">Existing UI</span>
+          </button>
+          <button class="type-btn" id="typeBtnText" onclick="setType('text')">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M4 6h16M4 10h16M4 14h10"/></svg>
+            <span class="type-btn-label">Text description</span>
+            <span class="type-btn-sub">Written requirements</span>
+          </button>
+        </div>
+
+        <!-- Process map panel -->
+        <div class="input-panel active" id="panelProcess">
+          <div class="paste-hint">
+            <kbd>Ctrl</kbd>+<kbd>V</kbd> to paste a process map image directly
+          </div>
+          <div class="drop-zone" id="dzProcess"
+            ondragover="dzOver(event,'process')" ondragleave="dzLeave('process')"
+            ondrop="dzDrop(event,'process')" onclick="document.getElementById('fiProcess').click()">
+            <input type="file" id="fiProcess" accept="image/*" onchange="fileChosen(event,'process')" onclick="event.stopPropagation()" style="display:none">
+            <div class="drop-zone-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="28" height="28"><rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg></div>
+            <div class="drop-zone-text">Click to browse or drag & drop</div>
+            <div class="drop-zone-sub">PNG, JPG, PDF — process maps, swimlane diagrams, flowcharts</div>
+          </div>
+          <div class="field" style="margin-top:10px">
+            <label>Notes on the process map (optional)</label>
+            <textarea id="processNotes" rows="2" placeholder="Describe the scope, which steps to focus on, or any context the agent needs" oninput="update()"></textarea>
+          </div>
+        </div>
+
+        <!-- Screenshot panel -->
+        <div class="input-panel" id="panelScreenshot">
+          <div class="paste-hint">
+            <kbd>Ctrl</kbd>+<kbd>V</kbd> to paste a screenshot directly
+          </div>
+          <div class="drop-zone" id="dzScreenshot"
+            ondragover="dzOver(event,'screenshot')" ondragleave="dzLeave('screenshot')"
+            ondrop="dzDrop(event,'screenshot')" onclick="document.getElementById('fiScreenshot').click()">
+            <input type="file" id="fiScreenshot" accept="image/*" onchange="fileChosen(event,'screenshot')" onclick="event.stopPropagation()" style="display:none">
+            <div class="drop-zone-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="28" height="28"><rect x="2" y="4" width="20" height="14" rx="2"/><path d="M8 20h8M12 18v2"/></svg></div>
+            <div class="drop-zone-text">Click to browse or drag & drop</div>
+            <div class="drop-zone-sub">Screenshot of the existing UI or system to replicate or extend</div>
+          </div>
+          <div class="field" style="margin-top:10px">
+            <label>What needs to change or be built from this screen?</label>
+            <textarea id="screenshotDesc" rows="3" placeholder="e.g. Add a bulk export button to the toolbar, replicate this layout for mobile, replace the table with a card view" oninput="update()"></textarea>
+          </div>
+        </div>
+
+        <!-- Text panel -->
+        <div class="input-panel" id="panelText">
+          <div class="field">
+            <label>Requirement description</label>
+            <textarea id="textDesc" rows="6" placeholder="Describe the feature, capability, or process you want built. Be as specific as you can about who does what and what the outcome should be." oninput="update()"></textarea>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- Context -->
+    <div class="card">
+      <div class="card-header">
+        <div class="card-header-icon">
+          <svg viewBox="0 0 16 16"><path d="M8 1a7 7 0 100 14A7 7 0 008 1zm1 10H7V7h2v4zm0-5H7V4h2v2z"/></svg>
+        </div>
+        <span class="card-title">Additional context</span>
+      </div>
+      <div class="card-body">
+        <div class="field">
+          <label>Target user / persona</label>
+          <input type="text" id="targetUser" placeholder="e.g. Project manager, Finance lead, External vendor" oninput="update()">
+        </div>
+        <div class="field">
+          <label>Business goal</label>
+          <textarea id="businessGoal" rows="2" placeholder="What problem does this solve or what outcome does it enable?" oninput="update()"></textarea>
+        </div>
+        <div class="field">
+          <label>Constraints or assumptions</label>
+          <textarea id="constraints" rows="2" placeholder="Technical constraints, out-of-scope items, dependencies on other stories" oninput="update()"></textarea>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Right col — preview -->
+  <div class="preview-panel">
+    <div class="card">
+      <div class="card-header">
+        <div class="card-header-icon">
+          <svg viewBox="0 0 16 16"><path d="M3 2h10a1 1 0 011 1v10a1 1 0 01-1 1H3a1 1 0 01-1-1V3a1 1 0 011-1zm1 2v8h8V4H4z"/></svg>
+        </div>
+        <span class="card-title">Request preview</span>
+      </div>
+      <div class="preview-box" id="preview"></div>
+      <div class="filename-chips" id="filenameChips"></div>
+
+      <!-- AI result panel -->
+      <div class="ai-result" id="aiResult">
+        <div class="ai-result-header" id="aiResultHeader">
+          <svg id="aiResultIcon" viewBox="0 0 16 16" fill="currentColor"></svg>
+          <span id="aiResultTitle"></span>
+        </div>
+        <div class="ai-result-body">
+          <div class="ai-score-row">
+            <span class="ai-score-label">Quality score</span>
+            <span class="ai-score-value" id="aiScore"></span>
+          </div>
+          <div class="ai-issues" id="aiIssues"></div>
+          <div class="ai-summary-text" id="aiSummary"></div>
+        </div>
+      </div>
+
+      <div class="actions">
+        <button class="btn btn-ai" id="aiCheckBtn" onclick="runAiCheck()" disabled>
+          <svg viewBox="0 0 16 16" fill="currentColor" width="14" height="14"><path d="M8 1a7 7 0 100 14A7 7 0 008 1zm0 2a5 5 0 110 10A5 5 0 018 3zm-.75 2.5v3.25l2.5 1.5.5-.87-2-1.2V5.5h-1z"/></svg>
+          Run AI check
+        </button>
+        <div class="btn-wrap">
+          <button class="btn btn-primary" onclick="downloadAll()">
+            <svg viewBox="0 0 16 16" fill="currentColor"><path d="M8 1a1 1 0 011 1v6.586l1.293-1.293a1 1 0 111.414 1.414l-3 3a1 1 0 01-1.414 0l-3-3a1 1 0 011.414-1.414L7 8.586V2a1 1 0 011-1zM3 13a1 1 0 000 2h10a1 1 0 000-2H3z"/></svg>
+            Download
+          </button>
+          <div class="warn-badge" id="warnBadge"></div>
+        </div>
+        <button class="btn" onclick="copyRequest()" title="Copy markdown" style="flex-shrink:0">
+          <svg viewBox="0 0 16 16" fill="currentColor"><path d="M4 2a2 2 0 00-2 2v8a2 2 0 002 2h5a2 2 0 002-2V8l-4-4H4zm5 0l4 4h-3a1 1 0 01-1-1V2zM6 6a1 1 0 000 2h4a1 1 0 000-2H6zm0 3a1 1 0 000 2h3a1 1 0 000-2H6z"/></svg>
+        </button>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+  // ── State ──────────────────────────────────────────────────────────────────
+  var currentType  = 'process';
+  var currentScope = 'story';
+  var images = { process: null, screenshot: null };
+  var imageExts = { process: 'png', screenshot: 'png' };
+
+  // ── Settings ───────────────────────────────────────────────────────────────
+  function toggleSettings() {
+    var bar = document.getElementById('settingsBar');
+    var btn = document.getElementById('settingsToggle');
+    var open = bar.classList.toggle('open');
+    btn.classList.toggle('active', open);
+  }
+
+  function saveSettings() {
+    var key   = document.getElementById('apiKey').value.trim();
+    var model = document.getElementById('modelSelect').value;
+    localStorage.setItem('zyantik_api_key', key);
+    localStorage.setItem('zyantik_model', model);
+    updateSettingsStatus(key);
+  }
+
+  function loadSettings() {
+    var key   = localStorage.getItem('zyantik_api_key') || '';
+    var model = localStorage.getItem('zyantik_model') || 'claude-sonnet-4-5';
+    document.getElementById('apiKey').value = key;
+    document.getElementById('modelSelect').value = model;
+    updateSettingsStatus(key);
+  }
+
+  function updateSettingsStatus(key) {
+    var dot  = document.getElementById('settingsDot');
+    var text = document.getElementById('settingsStatusText');
+    var btn  = document.getElementById('aiCheckBtn');
+    if (!btn) return;
+    if (key && key.startsWith('sk-ant-')) {
+      dot.className  = 'settings-dot ok';
+      text.textContent = 'API key configured — AI check enabled';
+      btn.disabled = false;
+    } else if (key) {
+      dot.className  = 'settings-dot err';
+      text.textContent = 'Key format looks incorrect — should start with sk-ant-';
+      btn.disabled = true;
+    } else {
+      dot.className  = 'settings-dot';
+      text.textContent = 'Enter your API key to enable AI quality check';
+      btn.disabled = true;
+    }
+  }
+
+  // ── Helpers ────────────────────────────────────────────────────────────────
+  function pad(n) { return String(n).padStart(3, '0'); }
+
+  function slug(str) {
+    return (str || '').trim().toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'request';
+  }
+
+  function getPrefix() {
+    var num   = pad(parseInt(document.getElementById('reqNum').value) || 1);
+    var title = slug(document.getElementById('reqTitle').value);
+    return 'REQ-' + num + '-' + title;
+  }
+
+  function getImageFilename(type) {
+    return getPrefix() + '-' + type + '.' + (imageExts[type] || 'png');
+  }
+
+  // ── Type / scope selectors ─────────────────────────────────────────────────
+  function setType(type) {
+    currentType = type;
+    ['process','screenshot','text'].forEach(function(t) {
+      document.getElementById('typeBtn' + t.charAt(0).toUpperCase() + t.slice(1))
+        .classList.toggle('active', t === type);
+      document.getElementById('panel' + t.charAt(0).toUpperCase() + t.slice(1))
+        .classList.toggle('active', t === type);
+    });
+    update();
+  }
+
+  function setScope(scope) {
+    currentScope = scope;
+    document.getElementById('scopeStory').classList.toggle('active', scope === 'story');
+    document.getElementById('scopeEpic').classList.toggle('active', scope === 'epic');
+    update();
+  }
+
+  // ── Drop zone ──────────────────────────────────────────────────────────────
+  function dzOver(e, type) {
+    e.preventDefault();
+    document.getElementById('dz' + cap(type)).classList.add('drag-over');
+  }
+
+  function dzLeave(type) {
+    document.getElementById('dz' + cap(type)).classList.remove('drag-over');
+  }
+
+  function dzDrop(e, type) {
+    e.preventDefault();
+    dzLeave(type);
+    var file = e.dataTransfer.files[0];
+    if (file && file.type.startsWith('image/')) loadImage(file, type);
+  }
+
+  function fileChosen(e, type) {
+    var file = e.target.files[0];
+    if (file) loadImage(file, type);
+  }
+
+  function loadImage(file, type) {
+    var ext = file.name.split('.').pop().toLowerCase() || 'png';
+    imageExts[type] = ext;
+    var reader = new FileReader();
+    reader.onload = function(ev) {
+      images[type] = ev.target.result;
+      renderDropZone(type);
+      update();
+    };
+    reader.readAsDataURL(file);
+  }
+
+  function renderDropZone(type) {
+    var dz = document.getElementById('dz' + cap(type));
+    var existing = dz.querySelector('img.dzimg');
+    if (images[type]) {
+      dz.querySelectorAll('.drop-zone-icon,.drop-zone-text,.drop-zone-sub').forEach(function(el){ el.style.display='none'; });
+      if (!existing) {
+        var img = document.createElement('img');
+        img.className = 'dzimg';
+        img.style.cssText = 'max-height:180px;width:100%;object-fit:contain;border-radius:4px';
+        dz.appendChild(img);
+      }
+      dz.querySelector('img.dzimg').src = images[type];
+    } else {
+      dz.querySelectorAll('.drop-zone-icon,.drop-zone-text,.drop-zone-sub').forEach(function(el){ el.style.display=''; });
+      if (existing) existing.remove();
+    }
+  }
+
+  function cap(str) { return str.charAt(0).toUpperCase() + str.slice(1); }
+
+  // ── Paste handler ──────────────────────────────────────────────────────────
+  document.addEventListener('paste', function(e) {
+    var items = e.clipboardData && e.clipboardData.items;
+    if (!items) return;
+    for (var i = 0; i < items.length; i++) {
+      if (items[i].type.startsWith('image/')) {
+        e.preventDefault();
+        var file = items[i].getAsFile();
+        var ext  = items[i].type.split('/')[1] || 'png';
+        var type = (currentType === 'text') ? 'process' : currentType;
+        imageExts[type] = ext;
+        var reader = new FileReader();
+        (function(t){ reader.onload = function(ev){ images[t]=ev.target.result; renderDropZone(t); update(); showToast('Image pasted'); }; })(type);
+        reader.readAsDataURL(file);
+        break;
+      }
+    }
+  });
+
+  // ── Markdown builder ───────────────────────────────────────────────────────
+  function buildMarkdown() {
+    var num        = pad(parseInt(document.getElementById('reqNum').value) || 1);
+    var titleRaw   = (document.getElementById('reqTitle').value || 'request').replace(/-/g,' ');
+    var targetUser = document.getElementById('targetUser').value.trim()  || '[not specified]';
+    var bizGoal    = document.getElementById('businessGoal').value.trim() || '[not specified]';
+    var constraints= document.getElementById('constraints').value.trim() || 'none';
+    var scopeLabel = currentScope === 'epic' ? 'Let AI decide (epic if large)' : 'Single user story';
+
+    var inputSection = '';
+    if (currentType === 'process') {
+      var notes = document.getElementById('processNotes').value.trim() || 'none';
+      inputSection = '## Input type\n\nProcess map / diagram\n\n'
+        + '## Process map image\n\n'
+        + (images.process ? getImageFilename('process') + ' (attached)' : 'none') + '\n\n'
+        + '## Notes on process map\n\n' + notes;
+    } else if (currentType === 'screenshot') {
+      var desc = document.getElementById('screenshotDesc').value.trim() || '[not specified]';
+      inputSection = '## Input type\n\nScreenshot of existing UI\n\n'
+        + '## Screenshot image\n\n'
+        + (images.screenshot ? getImageFilename('screenshot') + ' (attached)' : 'none') + '\n\n'
+        + '## What needs to change or be built\n\n' + desc;
+    } else {
+      var text = document.getElementById('textDesc').value.trim() || '[not specified]';
+      inputSection = '## Input type\n\nText description\n\n'
+        + '## Requirement description\n\n' + text;
+    }
+
+    return '# Story Request — REQ-' + num + ' ' + titleRaw + '\n\n'
+      + '## Scope hint\n\n' + scopeLabel + '\n\n'
+      + inputSection + '\n\n'
+      + '## Target user / persona\n\n' + targetUser + '\n\n'
+      + '## Business goal\n\n' + bizGoal + '\n\n'
+      + '## Constraints and assumptions\n\n' + constraints + '\n';
+  }
+
+  // ── Update ─────────────────────────────────────────────────────────────────
+  function update() {
+    document.getElementById('reqSlug').textContent = getPrefix() + '.md';
+    updatePreview();
+    updateChips();
+  }
+
+  function updatePreview() {
+    var md    = buildMarkdown();
+    var lines = md.split('\n').map(function(line) {
+      if (line.startsWith('# '))  return '<span class="md-h1">' + line + '</span>';
+      if (line.startsWith('## ')) return '<span class="md-h2">' + line + '</span>';
+      return line;
+    });
+    document.getElementById('preview').innerHTML = lines.join('\n');
+  }
+
+  function updateChips() {
+    var chips = document.getElementById('filenameChips');
+    var html = '';
+    var hasImg = false;
+
+    if (currentType !== 'text') {
+      var type = currentType;
+      var fname = getImageFilename(type);
+      var attached = !!images[type];
+      hasImg = attached;
+      html += '<div class="filename-chip">'
+        + '<div class="chip-dot" style="background:' + (attached ? 'var(--brand)' : 'var(--zinc-300)') + '"></div>'
+        + '<span>' + fname + '</span>'
+        + '<span style="font-size:10px;color:' + (attached ? 'var(--brand)' : 'var(--zinc-400)') + ';margin-left:auto">'
+        + (attached ? 'image attached' : 'no image') + '</span>'
+        + '</div>';
+    }
+
+    html += '<div class="filename-chip">'
+      + '<div class="chip-dot" style="background:var(--brand)"></div>'
+      + '<span>' + getPrefix() + '.md</span>'
+      + '<span style="font-size:10px;color:var(--zinc-400);margin-left:auto">ticket</span>'
+      + '</div>';
+
+    chips.innerHTML = html;
+  }
+
+  // ── Download ───────────────────────────────────────────────────────────────
+  async function downloadAll() {
+    var prefix = getPrefix();
+    var md     = buildMarkdown();
+
+    var blob = new Blob([md], { type: 'text/markdown' });
+    var a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = prefix + '.md';
+    document.body.appendChild(a); a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(a.href);
+
+    if (currentType !== 'text') {
+      var type = currentType;
+      if (images[type]) {
+        await new Promise(function(r){ setTimeout(r, 200); });
+        var imgA = document.createElement('a');
+        imgA.href = images[type];
+        imgA.download = getImageFilename(type);
+        document.body.appendChild(imgA); imgA.click();
+        document.body.removeChild(imgA);
+      }
+    }
+
+    showToast('Downloaded ' + prefix + '.md' + (images[currentType] ? ' + image' : ''));
+  }
+
+  function copyRequest() {
+    navigator.clipboard.writeText(buildMarkdown()).then(function(){
+      showToast('Copied to clipboard');
+    });
+  }
+
+  function showToast(msg) {
+    var t = document.getElementById('toast');
+    t.textContent = msg;
+    t.classList.add('show');
+    setTimeout(function(){ t.classList.remove('show'); }, 2500);
+  }
+
+  // ── AI quality check ───────────────────────────────────────────────────────
+  async function runAiCheck() {
+    var key = localStorage.getItem('zyantik_api_key') || '';
+    if (!key) { showToast('Add your API key in AI Settings first'); return; }
+
+    var btn = document.getElementById('aiCheckBtn');
+    btn.innerHTML = '<div class="spinner"></div> Checking...';
+    btn.disabled  = true;
+
+    var md = buildMarkdown();
+
+    var prompt = 'You are a quality reviewer for software story input requests that will be processed by an AI agent pipeline to generate user stories and epics. Review this story input request.\n\n'
+      + 'INPUT REQUEST:\n' + md + '\n\n'
+      + 'IMAGE ATTACHED: ' + (images[currentType] ? 'Yes' : 'No') + '\n\n'
+      + 'Evaluate on these criteria:\n'
+      + '1. Clarity - is the requirement specific enough for story generation?\n'
+      + '2. Target user - is the persona or user role clearly identified?\n'
+      + '3. Business goal - is the outcome or problem being solved stated?\n'
+      + '4. Input completeness - is the image or description sufficient to work from?\n'
+      + '5. Scope appropriateness - does the scope hint match the apparent complexity?\n'
+      + '6. Agent actionability - can the analysis agent proceed without asking follow-up questions?\n\n'
+      + 'Respond ONLY with valid JSON in this exact format:\n'
+      + '{"score":<0-100>,"issues":[{"type":"issue","text":"..."},{"type":"suggestion","text":"..."},{"type":"ok","text":"..."}],"summary":"..."}\n\n'
+      + 'Use issue=blocking, suggestion=improvement, ok=well done. Include 2-5 items total.';
+
+    try {
+      var res = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': key,
+          'anthropic-version': '2023-06-01',
+          'anthropic-dangerous-direct-browser-access': 'true'
+        },
+        body: JSON.stringify({
+          model: localStorage.getItem('zyantik_model') || 'claude-sonnet-4-5',
+          max_tokens: 800,
+          messages: [{ role: 'user', content: prompt }]
+        })
+      });
+
+      if (!res.ok) {
+        var err = await res.json().catch(function(){ return {}; });
+        throw new Error((err.error && err.error.message) || 'API error ' + res.status);
+      }
+
+      var data   = await res.json();
+      var text   = (data.content && data.content[0] && data.content[0].text) || '';
+      var clean  = text.replace(/```json|```/g, '').trim();
+      var result = JSON.parse(clean);
+      renderAiResult(result);
+
+    } catch (e) {
+      showToast('AI check failed: ' + e.message);
+      btn.innerHTML = '<svg viewBox="0 0 16 16" fill="currentColor" width="14" height="14"><path d="M8 1a7 7 0 100 14A7 7 0 008 1zm0 2a5 5 0 110 10A5 5 0 018 3zm-.75 2.5v3.25l2.5 1.5.5-.87-2-1.2V5.5h-1z"/></svg> Run AI check';
+      btn.disabled = false;
+    }
+  }
+
+  function renderAiResult(result) {
+    var panel    = document.getElementById('aiResult');
+    var header   = document.getElementById('aiResultHeader');
+    var icon     = document.getElementById('aiResultIcon');
+    var title    = document.getElementById('aiResultTitle');
+    var scoreEl  = document.getElementById('aiScore');
+    var issuesEl = document.getElementById('aiIssues');
+    var summaryEl= document.getElementById('aiSummary');
+    var badge    = document.getElementById('warnBadge');
+    var btn      = document.getElementById('aiCheckBtn');
+
+    var score      = Math.max(0, Math.min(100, result.score || 0));
+    var issues     = (result.issues || []).filter(function(i){ return i.type === 'issue'; });
+    var issueCount = issues.length;
+
+    scoreEl.textContent = score + '/100';
+    scoreEl.className = 'ai-score-value ' + (score >= 75 ? 'high' : score >= 50 ? 'mid' : 'low');
+
+    header.className = 'ai-result-header ' + (issueCount === 0 ? 'pass' : score >= 50 ? 'warn' : 'err');
+    if (issueCount === 0) {
+      icon.innerHTML = '<path d="M13.854 3.646a.5.5 0 010 .708l-7 7a.5.5 0 01-.708 0l-3.5-3.5a.5.5 0 11.708-.708L6.5 10.293l6.646-6.647a.5.5 0 01.708 0z"/>';
+      title.textContent = 'Request looks good — ready to download';
+    } else {
+      icon.innerHTML = '<path d="M8 1a7 7 0 100 14A7 7 0 008 1zm0 3a.5.5 0 01.5.5v4a.5.5 0 01-1 0v-4A.5.5 0 018 4zm0 7a.75.75 0 110 1.5A.75.75 0 018 11z"/>';
+      title.textContent = issueCount + ' issue' + (issueCount > 1 ? 's' : '') + ' found — review before downloading';
+    }
+
+    var typeIcon = { issue: '⚠', suggestion: '→', ok: '✓' };
+    issuesEl.innerHTML = (result.issues || []).map(function(item) {
+      return '<div class="ai-issue ' + item.type + '">'
+        + '<span class="ai-issue-icon">' + (typeIcon[item.type] || '·') + '</span>'
+        + '<span>' + item.text + '</span></div>';
+    }).join('');
+
+    summaryEl.textContent = result.summary || '';
+    panel.classList.add('visible');
+
+    if (issueCount > 0) {
+      badge.textContent = issueCount;
+      badge.classList.add('visible');
+    } else {
+      badge.classList.remove('visible');
+    }
+
+    btn.innerHTML = '<svg viewBox="0 0 16 16" fill="currentColor" width="14" height="14"><path d="M8 1a7 7 0 100 14A7 7 0 008 1zm0 2a5 5 0 110 10A5 5 0 018 3zm-.75 2.5v3.25l2.5 1.5.5-.87-2-1.2V5.5h-1z"/></svg> Re-check';
+    btn.disabled = false;
+  }
+
+  // ── Init ───────────────────────────────────────────────────────────────────
+  update();
+  loadSettings();
+</script>
+</body>
+</html>
