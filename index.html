@@ -173,8 +173,53 @@
   .type-btn-sub { font-size: 10px; color: var(--zinc-400); }
 
   /* ── Input panels ── */
-  .input-panel { display: none; }
-  .input-panel.active { display: block; }
+  .input-panel { display: none !important; }
+  .input-panel.active { display: block !important; }
+
+  /* ── AI rewrite proposal ── */
+  .ai-rewrite {
+    margin-top: 10px;
+    border: 1px solid var(--brand-border);
+    border-radius: var(--radius-lg);
+    overflow: hidden;
+    display: none;
+  }
+  .ai-rewrite.visible { display: block; }
+  .ai-rewrite-header {
+    background: var(--brand-light);
+    padding: 8px 14px;
+    font-size: 11px; font-weight: 600;
+    color: var(--brand-dark);
+    display: flex; align-items: center; justify-content: space-between;
+  }
+  .ai-rewrite-body { padding: 12px 14px; background: white; }
+  .ai-rewrite-field { margin-bottom: 10px; }
+  .ai-rewrite-field:last-child { margin-bottom: 0; }
+  .ai-rewrite-label {
+    font-size: 10px; font-weight: 600; text-transform: uppercase;
+    letter-spacing: 0.05em; color: var(--zinc-500); margin-bottom: 4px;
+  }
+  .ai-rewrite-text {
+    font-size: 12px; color: var(--zinc-700); line-height: 1.6;
+    background: var(--zinc-50); border: 1px solid var(--zinc-200);
+    border-radius: var(--radius-md); padding: 8px 10px;
+    white-space: pre-wrap;
+  }
+  .ai-rewrite-actions { display: flex; gap: 6px; margin-top: 8px; }
+  .btn-apply {
+    padding: 6px 12px; border-radius: var(--radius-md);
+    font-size: 11px; font-weight: 600; cursor: pointer;
+    border: 1px solid var(--brand); background: var(--brand);
+    color: white; font-family: inherit; transition: all 0.15s;
+  }
+  .btn-apply:hover { background: var(--brand-dark); border-color: var(--brand-dark); }
+  .btn-dismiss {
+    padding: 6px 12px; border-radius: var(--radius-md);
+    font-size: 11px; font-weight: 500; cursor: pointer;
+    border: 1px solid var(--zinc-200); background: white;
+    color: var(--zinc-600); font-family: inherit; transition: all 0.15s;
+  }
+  .btn-dismiss:hover { background: var(--zinc-50); }
 
   /* ── Drop zone ── */
   .drop-zone {
@@ -533,6 +578,15 @@
         </div>
       </div>
 
+      <!-- AI rewrite proposals -->
+      <div class="ai-rewrite" id="aiRewrite">
+        <div class="ai-rewrite-header">
+          <span>&#10024; Proposed improvements &mdash; click Apply to update the form</span>
+          <button class="btn-dismiss" onclick="dismissRewrite()">Dismiss</button>
+        </div>
+        <div class="ai-rewrite-body" id="aiRewriteBody"></div>
+      </div>
+
       <div class="actions">
         <button class="btn btn-ai" id="aiCheckBtn" onclick="runAiCheck()" disabled>
           <svg viewBox="0 0 16 16" fill="currentColor" width="14" height="14"><path d="M8 1a7 7 0 100 14A7 7 0 008 1zm0 2a5 5 0 110 10A5 5 0 018 3zm-.75 2.5v3.25l2.5 1.5.5-.87-2-1.2V5.5h-1z"/></svg>
@@ -629,10 +683,15 @@
   function setType(type) {
     currentType = type;
     ['process','screenshot','text'].forEach(function(t) {
-      document.getElementById('typeBtn' + t.charAt(0).toUpperCase() + t.slice(1))
-        .classList.toggle('active', t === type);
-      document.getElementById('panel' + t.charAt(0).toUpperCase() + t.slice(1))
-        .classList.toggle('active', t === type);
+      var typeCap = t.charAt(0).toUpperCase() + t.slice(1);
+      var btn   = document.getElementById('typeBtn'   + typeCap);
+      var panel = document.getElementById('panel' + typeCap);
+      if (btn)   btn.classList.toggle('active',   t === type);
+      if (panel) {
+        panel.classList.toggle('active', t === type);
+        // Belt-and-braces: set display directly in case CSS is overridden
+        panel.style.display = (t === type) ? 'block' : 'none';
+      }
     });
     update();
   }
@@ -861,7 +920,15 @@
       + '6. Agent actionability - can the analysis agent proceed without asking follow-up questions?\n\n'
       + 'Respond ONLY with valid JSON in this exact format:\n'
       + '{"score":<0-100>,"issues":[{"type":"issue","text":"..."},{"type":"suggestion","text":"..."},{"type":"ok","text":"..."}],"summary":"..."}\n\n'
-      + 'Use issue=blocking, suggestion=improvement, ok=well done. Include 2-5 items total.';
+      + 'Use issue=blocking, suggestion=improvement, ok=well done. Include 2-5 items total.\n\n'
+      + 'Additionally, produce a "rewrites" object with improved versions of the weak fields. '
+      + 'Only include fields that genuinely need improvement. Possible fields: '
+      + '"description" (rewritten as a clear user story: As a [persona], I want [action], so that [outcome]), '
+      + '"acceptanceCriteria" (3-5 Given/When/Then criteria as a single string), '
+      + '"businessGoal" (clearer statement of the outcome), '
+      + '"constraints" (any implied constraints not stated). '
+      + 'Add rewrites as a sibling key: {"score":...,"issues":[...],"summary":"...","rewrites":{"description":"...","acceptanceCriteria":"..."}}'
+      + '\nOnly include rewrite keys where you have a specific improvement. Omit keys that are already good.';
 
     try {
       var res = await fetch('https://api.anthropic.com/v1/messages', {
@@ -943,6 +1010,89 @@
 
     btn.innerHTML = '<svg viewBox="0 0 16 16" fill="currentColor" width="14" height="14"><path d="M8 1a7 7 0 100 14A7 7 0 008 1zm0 2a5 5 0 110 10A5 5 0 018 3zm-.75 2.5v3.25l2.5 1.5.5-.87-2-1.2V5.5h-1z"/></svg> Re-check';
     btn.disabled = false;
+
+    // Show rewrite proposals if any
+    renderRewrites(result.rewrites || {});
+  }
+
+  function renderRewrites(rewrites) {
+    var panel = document.getElementById('aiRewrite');
+    var body  = document.getElementById('aiRewriteBody');
+    var fields = Object.keys(rewrites);
+    if (!fields.length) { panel.classList.remove('visible'); return; }
+
+    var labels = {
+      description:         'Requirement description (user story format)',
+      acceptanceCriteria:  'Proposed acceptance criteria',
+      businessGoal:        'Business goal',
+      constraints:         'Constraints and assumptions'
+    };
+    var targets = {
+      description:         'textDesc',
+      acceptanceCriteria:  'constraints',
+      businessGoal:        'businessGoal',
+      constraints:         'constraints'
+    };
+
+    body.innerHTML = fields.map(function(key) {
+      var text = rewrites[key];
+      return '<div class="ai-rewrite-field">'
+        + '<div class="ai-rewrite-label">' + (labels[key] || key) + '</div>'
+        + '<div class="ai-rewrite-text" id="rw-' + key + '">' + text.replace(/</g,'&lt;').replace(/>/g,'&gt;') + '</div>'
+        + '<div class="ai-rewrite-actions">'
+        + '<button class="btn-apply" onclick="applyRewrite('' + key + '')">Apply to form</button>'
+        + '</div>'
+        + '</div>';
+    }).join('');
+
+    panel.classList.add('visible');
+  }
+
+  function applyRewrite(key) {
+    var el = document.getElementById('rw-' + key);
+    if (!el) return;
+    var text = el.textContent;
+    var fieldMap = {
+      description:        'textDesc',
+      acceptanceCriteria: 'constraints',
+      businessGoal:       'businessGoal',
+      constraints:        'constraints'
+    };
+    // Special case: if text input type is active, apply description there
+    // Otherwise put it in constraints as notes
+    if (key === 'description') {
+      var target = document.getElementById('textDesc');
+      if (target) {
+        target.value = text;
+        // If not on text panel, switch to it
+        if (currentType !== 'text') { setType('text'); }
+      }
+    } else if (key === 'acceptanceCriteria') {
+      var target = document.getElementById('constraints');
+      if (target) {
+        var existing = target.value.trim();
+        target.value = existing
+          ? existing + '\n\nSuggested ACs:\n' + text
+          : 'Suggested ACs:\n' + text;
+      }
+    } else {
+      var targetId = fieldMap[key];
+      var target = targetId ? document.getElementById(targetId) : null;
+      if (target) target.value = text;
+    }
+    update();
+    showToast('Applied to form');
+    // Visually confirm
+    el.style.background = '#f0fdf4';
+    el.style.borderColor = '#86efac';
+    setTimeout(function() {
+      el.style.background = '';
+      el.style.borderColor = '';
+    }, 1500);
+  }
+
+  function dismissRewrite() {
+    document.getElementById('aiRewrite').classList.remove('visible');
   }
 
   // ── Init ───────────────────────────────────────────────────────────────────
