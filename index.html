@@ -764,12 +764,14 @@
 
   function acTitleChanged(i, val) {
     acEntries[i].title = val;
-    update();
+    updatePreview();
+    updateChips();
   }
 
   function acTextChanged(i, val) {
     acEntries[i].text = val;
-    update();
+    updatePreview();
+    updateChips();
   }
 
   function renderAcList() {
@@ -954,7 +956,6 @@
   // ── Update ─────────────────────────────────────────────────────────────────
   function update() {
     document.getElementById('reqSlug').textContent = getPrefix() + '.md';
-    renderAcList();
     updatePreview();
     updateChips();
   }
@@ -1208,16 +1209,33 @@
         if (currentType !== 'text') { setType('text'); }
       }
     } else if (key === 'acceptanceCriteria') {
-         // Parse proposed ACs — split on double newline, treat first line as title
-      var blocks = text.split('\n\n').map(function(s){ return s.trim(); }).filter(Boolean);
-      blocks.forEach(function(block) {
-        var nlIdx = block.indexOf('\n');
-        var firstLine = nlIdx > -1 ? block.substring(0, nlIdx) : block;
-        var rest = nlIdx > -1 ? block.substring(nlIdx + 1).trim() : '';
-        var isGWT = firstLine.toLowerCase().indexOf('given') === 0;
-        var title = isGWT ? ('Suggested scenario ' + (acEntries.length + 1)) : firstLine;
-        var body  = isGWT ? block : (rest || block);
-        addAc(title, body, true);
+         // Split on "Given" keyword to separate individual scenarios
+      // Handle both "Given..." at start and sentences containing ", Given "
+      var scenarios = [];
+      var givenParts = text.split(/(?:^|[.!?]\s+|,\s*)(?=Given\s)/i).map(function(s){ return s.trim(); }).filter(Boolean);
+      if (givenParts.length <= 1) {
+        // No clear Given splits — treat whole text as one scenario
+        scenarios = [text.trim()];
+      } else {
+        // Rebuild full Given...When...Then blocks
+        // Re-split more carefully: find positions of "Given" in original
+        var pos = [];
+        var rx = /Given\s/gi;
+        var m;
+        while ((m = rx.exec(text)) !== null) { pos.push(m.index); }
+        if (pos.length <= 1) {
+          scenarios = [text.trim()];
+        } else {
+          for (var si = 0; si < pos.length; si++) {
+            var start = pos[si];
+            var end2 = si + 1 < pos.length ? pos[si + 1] : text.length;
+            scenarios.push(text.substring(start, end2).trim());
+          }
+        }
+      }
+      scenarios.forEach(function(block) {
+        var num = acEntries.length + 1;
+        addAc('Suggested scenario ' + num, block, true);
       });
       renderAcList();
     } else {
