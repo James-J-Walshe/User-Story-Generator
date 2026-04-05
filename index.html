@@ -250,6 +250,58 @@
     font-size: 10px; font-family: inherit; font-weight: 600;
   }
 
+  /* ── AC list ── */
+  .ac-entry {
+    border: 1px solid var(--zinc-200);
+    border-radius: var(--radius-lg);
+    overflow: hidden;
+    transition: border-color 0.15s;
+  }
+  .ac-entry:focus-within { border-color: var(--brand); }
+  .ac-entry.suggested {
+    border-color: var(--brand-border);
+    background: var(--brand-light);
+  }
+  .ac-entry-header {
+    display: flex; align-items: center; gap: 8px;
+    padding: 7px 10px;
+    background: var(--zinc-50); border-bottom: 1px solid var(--zinc-100);
+  }
+  .ac-entry.suggested .ac-entry-header {
+    background: var(--brand-light); border-bottom-color: var(--brand-border);
+  }
+  .ac-num {
+    width: 20px; height: 20px; border-radius: 50%;
+    background: var(--brand); color: white;
+    font-size: 10px; font-weight: 700;
+    display: flex; align-items: center; justify-content: center;
+    flex-shrink: 0;
+  }
+  .ac-entry.suggested .ac-num { background: var(--brand-dark); }
+  .ac-suggested-badge {
+    font-size: 10px; font-weight: 600; color: var(--brand-dark);
+    background: white; border: 1px solid var(--brand-border);
+    border-radius: 3px; padding: 1px 6px; flex-shrink: 0;
+  }
+  .ac-entry-body { padding: 8px 10px; display: flex; flex-direction: column; gap: 6px; }
+  .ac-accept-btn {
+    padding: 4px 10px; border-radius: var(--radius-md);
+    font-size: 11px; font-weight: 600; cursor: pointer;
+    border: 1px solid var(--brand); background: var(--brand);
+    color: white; font-family: inherit; transition: all 0.15s;
+    margin-left: auto; flex-shrink: 0;
+  }
+  .ac-accept-btn:hover { background: var(--brand-dark); }
+  .add-ac-btn {
+    width: 100%; padding: 8px;
+    border: 1px dashed var(--zinc-300); border-radius: var(--radius-md);
+    background: white; color: var(--zinc-500);
+    font-size: 12px; font-weight: 500; cursor: pointer;
+    display: flex; align-items: center; justify-content: center; gap: 6px;
+    font-family: inherit; transition: all 0.15s;
+  }
+  .add-ac-btn:hover { border-color: var(--brand); color: var(--brand); background: var(--brand-light); }
+
   /* ── Scope selector ── */
   .scope-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
   .scope-option {
@@ -543,6 +595,14 @@
           <textarea id="businessGoal" rows="2" placeholder="What problem does this solve or what outcome does it enable?" oninput="update()"></textarea>
         </div>
         <div class="field">
+          <label>Acceptance criteria <span style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--zinc-400);font-size:10px">— optional, AI will propose if blank</span></label>
+          <div id="acList" style="display:flex;flex-direction:column;gap:8px;margin-bottom:8px"></div>
+          <button class="add-ac-btn" onclick="addAc()">
+            <svg width="13" height="13" viewBox="0 0 16 16" fill="currentColor"><path d="M8 2a1 1 0 011 1v4h4a1 1 0 010 2H9v4a1 1 0 01-2 0V9H3a1 1 0 010-2h4V3a1 1 0 011-1z"/></svg>
+            Add acceptance criterion
+          </button>
+        </div>
+        <div class="field">
           <label>Constraints or assumptions</label>
           <textarea id="constraints" rows="2" placeholder="Technical constraints, out-of-scope items, dependencies on other stories" oninput="update()"></textarea>
         </div>
@@ -617,6 +677,7 @@
   var currentScope = 'story';
   var images = { process: null, screenshot: null };
   var imageExts = { process: 'png', screenshot: 'png' };
+  var acEntries = [];
 
   // ── Settings ───────────────────────────────────────────────────────────────
   function toggleSettings() {
@@ -678,6 +739,82 @@
 
   function getImageFilename(type) {
     return getPrefix() + '-' + type + '.' + (imageExts[type] || 'png');
+  }
+
+  // ── Acceptance criteria list ──────────────────────────────────────────────────
+
+  function addAc(title, text, suggested) {
+    acEntries.push({ title: title || '', text: text || '', suggested: !!suggested });
+    renderAcList();
+    update();
+  }
+
+  function removeAc(i) {
+    acEntries.splice(i, 1);
+    renderAcList();
+    update();
+  }
+
+  function acceptSuggested(i) {
+    acEntries[i].suggested = false;
+    renderAcList();
+    update();
+    showToast('AC accepted');
+  }
+
+  function acTitleChanged(i, val) {
+    acEntries[i].title = val;
+    update();
+  }
+
+  function acTextChanged(i, val) {
+    acEntries[i].text = val;
+    update();
+  }
+
+  function renderAcList() {
+    var list = document.getElementById('acList');
+    if (!list) return;
+    list.innerHTML = acEntries.map(function(ac, i) {
+      var isSuggested = ac.suggested;
+      return '<div class="ac-entry' + (isSuggested ? ' suggested' : '') + '">'
+        + '<div class="ac-entry-header">'
+        + '<div class="ac-num">' + (i + 1) + '</div>'
+        + (isSuggested ? '<span class="ac-suggested-badge">AI suggested</span>' : '')
+        + '<input type="text" placeholder="Scenario title e.g. Successful currency conversion"'
+        + ' value="' + escHtml(ac.title) + '"'
+        + ' oninput="acTitleChanged(' + i + ', this.value)"'
+        + ' style="flex:1;border:none;background:transparent;font-size:12px;font-weight:600;color:var(--zinc-900);outline:none;padding:0;">'
+        + (isSuggested
+          ? '<button class="ac-accept-btn" onclick="acceptSuggested(' + i + ')">Accept</button>'
+          : '')
+        + '<button class="remove-btn" onclick="removeAc(' + i + ')" title="Remove" style="margin-left:4px">&times;</button>'
+        + '</div>'
+        + '<div class="ac-entry-body">'
+        + '<textarea rows="3"'
+        + ' placeholder="Given [context]&#10;When [action]&#10;Then [expected result]"'
+        + ' oninput="acTextChanged(' + i + ', this.value)"'
+        + ' style="width:100%;border:1px solid var(--zinc-200);border-radius:var(--radius-md);padding:7px 9px;font-size:12px;font-family:inherit;resize:vertical;line-height:1.6;background:' + (isSuggested ? 'white' : 'white') + '">'
+        + escHtml(ac.text)
+        + '</textarea>'
+        + '</div>'
+        + '</div>';
+    }).join('');
+  }
+
+  function escHtml(str) {
+    return (str || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
+
+  function buildAcMarkdown() {
+    var confirmed = acEntries.filter(function(ac) { return !ac.suggested; });
+    if (!confirmed.length) return '';
+    var nl = '\n';
+    return '## Acceptance criteria' + nl + nl
+      + confirmed.map(function(ac, i) {
+          return '### AC' + (i + 1) + (ac.title ? ': ' + ac.title : '') + nl + nl + (ac.text || '[not specified]');
+        }).join(nl + nl)
+      + nl + nl;
   }
 
   // ── Type / scope selectors ─────────────────────────────────────────────────
@@ -810,12 +947,14 @@
       + inputSection + '\n\n'
       + '## Target user / persona\n\n' + targetUser + '\n\n'
       + '## Business goal\n\n' + bizGoal + '\n\n'
+      + buildAcMarkdown()
       + '## Constraints and assumptions\n\n' + constraints + '\n';
   }
 
   // ── Update ─────────────────────────────────────────────────────────────────
   function update() {
     document.getElementById('reqSlug').textContent = getPrefix() + '.md';
+    renderAcList();
     updatePreview();
     updateChips();
   }
@@ -1069,13 +1208,18 @@
         if (currentType !== 'text') { setType('text'); }
       }
     } else if (key === 'acceptanceCriteria') {
-      var target = document.getElementById('constraints');
-      if (target) {
-        var existing = target.value.trim();
-        target.value = existing
-          ? existing + '\n\nSuggested ACs:\n' + text
-          : 'Suggested ACs:\n' + text;
-      }
+         // Parse proposed ACs — split on double newline, treat first line as title
+      var blocks = text.split('\n\n').map(function(s){ return s.trim(); }).filter(Boolean);
+      blocks.forEach(function(block) {
+        var nlIdx = block.indexOf('\n');
+        var firstLine = nlIdx > -1 ? block.substring(0, nlIdx) : block;
+        var rest = nlIdx > -1 ? block.substring(nlIdx + 1).trim() : '';
+        var isGWT = firstLine.toLowerCase().indexOf('given') === 0;
+        var title = isGWT ? ('Suggested scenario ' + (acEntries.length + 1)) : firstLine;
+        var body  = isGWT ? block : (rest || block);
+        addAc(title, body, true);
+      });
+      renderAcList();
     } else {
       var targetId = fieldMap[key];
       var target = targetId ? document.getElementById(targetId) : null;
