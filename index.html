@@ -1041,7 +1041,7 @@
         + '<div class="ai-rewrite-label">' + (labels[key] || key) + '</div>'
         + '<div class="ai-rewrite-text" id="rw-' + key + '">' + text.replace(/</g,'&lt;').replace(/>/g,'&gt;') + '</div>'
         + '<div class="ai-rewrite-actions">'
-        + '<button class="btn-apply" onclick="applyRewrite('' + key + '')">Apply to form</button>'
+        + '<button class="btn-apply" onclick="applyRewrite(\'' + key + '\')">Apply to form</button>'
         + '</div>'
         + '</div>';
     }).join('');
