@@ -1049,9 +1049,20 @@
 
     var md = buildMarkdown();
 
-    var prompt = 'You are a quality reviewer for software story input requests that will be processed by an AI agent pipeline to generate user stories and epics. Review this story input request.\n\n'
+    // Build existing confirmed ACs context for the prompt
+    var confirmedAcs = acEntries.filter(function(ac){ return !ac.suggested; });
+    var acContext = confirmedAcs.length
+      ? 'EXISTING CONFIRMED ACCEPTANCE CRITERIA:\n'
+        + confirmedAcs.map(function(ac, i){
+            return 'AC' + (i+1) + (ac.title ? ' - ' + ac.title : '') + ':\n' + (ac.text || '');
+          }).join('\n\n')
+        + '\n\n'
+      : 'EXISTING CONFIRMED ACCEPTANCE CRITERIA: none\n\n';
+
+    var prompt = 'You are a quality reviewer for software story input requests that will be processed by an AI agent pipeline. Review this story input request.\n\n'
       + 'INPUT REQUEST:\n' + md + '\n\n'
       + 'IMAGE ATTACHED: ' + (images[currentType] ? 'Yes' : 'No') + '\n\n'
+      + acContext
       + 'Evaluate on these criteria:\n'
       + '1. Clarity - is the requirement specific enough for story generation?\n'
       + '2. Target user - is the persona or user role clearly identified?\n'
@@ -1059,17 +1070,25 @@
       + '4. Input completeness - is the image or description sufficient to work from?\n'
       + '5. Scope appropriateness - does the scope hint match the apparent complexity?\n'
       + '6. Agent actionability - can the analysis agent proceed without asking follow-up questions?\n\n'
-      + 'Respond ONLY with valid JSON in this exact format:\n'
-      + '{"score":<0-100>,"issues":[{"type":"issue","text":"..."},{"type":"suggestion","text":"..."},{"type":"ok","text":"..."}],"summary":"..."}\n\n'
-      + 'Use issue=blocking, suggestion=improvement, ok=well done. Include 2-5 items total.\n\n'
-      + 'Additionally, produce a "rewrites" object with improved versions of the weak fields. '
-      + 'Only include fields that genuinely need improvement. Possible fields: '
-      + '"description" (rewritten as a clear user story: As a [persona], I want [action], so that [outcome]), '
-      + '"acceptanceCriteria" (3-5 Given/When/Then criteria as a single string), '
-      + '"businessGoal" (clearer statement of the outcome), '
-      + '"constraints" (any implied constraints not stated). '
-      + 'Add rewrites as a sibling key: {"score":...,"issues":[...],"summary":"...","rewrites":{"description":"...","acceptanceCriteria":"..."}}'
-      + '\nOnly include rewrite keys where you have a specific improvement. Omit keys that are already good.';
+      + 'Respond ONLY with valid JSON in this exact format (no markdown, no preamble):\n'
+      + '{'
+      +   '"score":<0-100>,'
+      +   '"issues":[{"type":"issue","text":"..."},{"type":"suggestion","text":"..."},{"type":"ok","text":"..."}],'
+      +   '"summary":"...",'
+      +   '"rewrites":{"description":"...","businessGoal":"...","constraints":"..."},'
+      +   '"acReview":['
+      +     '{"action":"keep","index":0},'
+      +     '{"action":"edit","index":1,"title":"revised title","text":"revised Given/When/Then text","reason":"why this needs updating"},'
+      +     '{"action":"new","title":"scenario title","text":"Given...\nWhen...\nThen..."}'
+      +   ']'
+      + '}\n\n'
+      + 'Rules for acReview:\n'
+      + '- Include one entry per existing confirmed AC (use action keep or edit, with index = 0-based position)\n'
+      + '- Add action:new entries for any scenarios not yet covered\n'
+      + '- Use action:edit only when the AC is genuinely incomplete, inaccurate, or missing a critical condition\n'
+      + '- Omit rewrites keys that are already good\n'
+      + '- acReview must always be present, even if all actions are keep\n'
+      + '- If there are no existing ACs, only include action:new entries in acReview';
 
     try {
       var res = await fetch('https://api.anthropic.com/v1/messages', {
@@ -1153,39 +1172,75 @@
     btn.disabled = false;
 
     // Show rewrite proposals if any
-    renderRewrites(result.rewrites || {});
+    renderRewrites(result.rewrites || {}, result.acReview || []);
   }
 
-  function renderRewrites(rewrites) {
+  function renderRewrites(rewrites, acReview) {
     var panel = document.getElementById('aiRewrite');
     var body  = document.getElementById('aiRewriteBody');
-    var fields = Object.keys(rewrites);
-    if (!fields.length) { panel.classList.remove('visible'); return; }
+    rewrites  = rewrites  || {};
+    acReview  = acReview  || [];
 
-    var labels = {
-      description:         'Requirement description (user story format)',
-      acceptanceCriteria:  'Proposed acceptance criteria',
-      businessGoal:        'Business goal',
-      constraints:         'Constraints and assumptions'
-    };
-    var targets = {
-      description:         'textDesc',
-      acceptanceCriteria:  'constraints',
-      businessGoal:        'businessGoal',
-      constraints:         'constraints'
+    var fieldLabels = {
+      description:  'Requirement description (user story format)',
+      businessGoal: 'Business goal',
+      constraints:  'Constraints and assumptions'
     };
 
-    body.innerHTML = fields.map(function(key) {
+    // Build field rewrite cards (exclude acceptanceCriteria — handled via acReview)
+    var fieldKeys = Object.keys(rewrites).filter(function(k){ return k !== 'acceptanceCriteria'; });
+    var fieldHtml = fieldKeys.map(function(key) {
       var text = rewrites[key];
       return '<div class="ai-rewrite-field">'
-        + '<div class="ai-rewrite-label">' + (labels[key] || key) + '</div>'
-        + '<div class="ai-rewrite-text" id="rw-' + key + '">' + text.replace(/</g,'&lt;').replace(/>/g,'&gt;') + '</div>'
+        + '<div class="ai-rewrite-label">' + (fieldLabels[key] || key) + '</div>'
+        + '<div class="ai-rewrite-text" id="rw-' + key + '">' + escHtml(text) + '</div>'
         + '<div class="ai-rewrite-actions">'
         + '<button class="btn-apply" onclick="applyRewrite(\'' + key + '\')">Apply to form</button>'
-        + '</div>'
-        + '</div>';
+        + '</div></div>';
     }).join('');
 
+    // Build AC review cards
+    var acHtml = '';
+    var editItems = acReview.filter(function(r){ return r.action === 'edit'; });
+    var newItems  = acReview.filter(function(r){ return r.action === 'new';  });
+
+    if (editItems.length) {
+      acHtml += '<div class="ai-rewrite-label" style="margin-top:12px;margin-bottom:6px">Suggested AC edits</div>';
+      acHtml += editItems.map(function(r, i) {
+        var idx   = r.index;
+        var existing = acEntries[idx];
+        var existingText = existing ? escHtml(existing.text) : '';
+        var dataIdx = 'acedit-' + i;
+        return '<div class="ai-rewrite-field" style="border:1px solid var(--amber-border);border-radius:var(--radius-md);overflow:hidden">'
+          + '<div style="background:var(--amber-light);padding:6px 10px;font-size:11px;font-weight:600;color:var(--amber);display:flex;align-items:center;justify-content:space-between">'
+          + '<span>Edit AC' + (idx + 1) + (existing && existing.title ? ': ' + escHtml(existing.title) : '') + '</span>'
+          + '<span style="font-weight:400;font-size:10px;color:var(--zinc-500)">' + escHtml(r.reason || '') + '</span>'
+          + '</div>'
+          + (existingText ? '<div style="padding:6px 10px;font-size:11px;color:var(--zinc-400);background:var(--zinc-50);text-decoration:line-through;white-space:pre-wrap">' + existingText + '</div>' : '')
+          + '<div class="ai-rewrite-text" style="margin:0;border-radius:0;border:none;border-top:1px solid var(--zinc-200)" id="rw-' + dataIdx + '">' + escHtml(r.text || '') + '</div>'
+          + '<div class="ai-rewrite-actions" style="padding:6px 10px;background:white">'
+          + '<button class="btn-apply" onclick="applyAcEdit(' + idx + ',\'' + dataIdx + '\',\'' + escHtml(r.title || (existing ? existing.title : '')) + '\')">Apply edit</button>'
+          + '</div></div>';
+      }).join('');
+    }
+
+    if (newItems.length) {
+      acHtml += '<div class="ai-rewrite-label" style="margin-top:12px;margin-bottom:6px">New AC suggestions</div>';
+      acHtml += newItems.map(function(r, i) {
+        var dataIdx = 'acnew-' + i;
+        return '<div class="ai-rewrite-field">'
+          + '<div class="ai-rewrite-label">' + escHtml(r.title || ('Suggested scenario ' + (i+1))) + '</div>'
+          + '<div class="ai-rewrite-text" id="rw-' + dataIdx + '">' + escHtml(r.text || '') + '</div>'
+          + '<div class="ai-rewrite-actions">'
+          + '<button class="btn-apply" onclick="applyAcNew(\'' + dataIdx + '\',\'' + escHtml(r.title || '') + '\')">Add to form</button>'
+          + '</div></div>';
+      }).join('');
+    }
+
+    var combined = fieldHtml + acHtml;
+    if (!combined.trim()) { panel.classList.remove('visible'); return; }
+
+    body.innerHTML = combined;
     panel.classList.add('visible');
   }
 
@@ -1208,31 +1263,38 @@
         // If not on text panel, switch to it
         if (currentType !== 'text') { setType('text'); }
       }
-    } else if (key === 'acceptanceCriteria') {
-         // Split on "Given" keyword to separate individual scenarios
-      // Handle both "Given..." at start and sentences containing ", Given "
+    } else if (key === 'acceptanceCriteria') { // legacy fallback — acReview preferred
+         // First remove any previously suggested (not yet accepted) entries
+      // so re-running the check doesn't stack up duplicates
+      acEntries = acEntries.filter(function(ac) { return !ac.suggested; });
+
+      // Parse scenarios — handle AC1:/AC2: prefixes, or split on Given boundaries
       var scenarios = [];
-      var givenParts = text.split(/(?:^|[.!?]\s+|,\s*)(?=Given\s)/i).map(function(s){ return s.trim(); }).filter(Boolean);
-      if (givenParts.length <= 1) {
-        // No clear Given splits — treat whole text as one scenario
-        scenarios = [text.trim()];
+
+      // Strategy 1: split on AC label prefixes (AC1:, AC2:, AC 1:, etc.)
+      var acLabelSplit = text.split(/(?:^|\s)AC\s*\d+\s*:/i).map(function(s){ return s.trim(); }).filter(Boolean);
+      if (acLabelSplit.length > 1) {
+        scenarios = acLabelSplit;
       } else {
-        // Rebuild full Given...When...Then blocks
-        // Re-split more carefully: find positions of "Given" in original
+        // Strategy 2: split on Given keyword boundaries
         var pos = [];
-        var rx = /Given\s/gi;
+        var searchText = text;
+        var givenRx = /Given\s/gi;
         var m;
-        while ((m = rx.exec(text)) !== null) { pos.push(m.index); }
-        if (pos.length <= 1) {
-          scenarios = [text.trim()];
-        } else {
+        while ((m = givenRx.exec(searchText)) !== null) { pos.push(m.index); }
+        if (pos.length > 1) {
           for (var si = 0; si < pos.length; si++) {
             var start = pos[si];
             var end2 = si + 1 < pos.length ? pos[si + 1] : text.length;
             scenarios.push(text.substring(start, end2).trim());
           }
+        } else {
+          // Strategy 3: single block
+          scenarios = [text.trim()];
         }
       }
+
+      // Add each as a separate suggested entry
       scenarios.forEach(function(block) {
         var num = acEntries.length + 1;
         addAc('Suggested scenario ' + num, block, true);
@@ -1252,6 +1314,27 @@
       el.style.background = '';
       el.style.borderColor = '';
     }, 1500);
+  }
+
+  function applyAcEdit(acIdx, dataId, newTitle) {
+    var el = document.getElementById('rw-' + dataId);
+    if (!el || !acEntries[acIdx]) return;
+    acEntries[acIdx].text  = el.textContent;
+    acEntries[acIdx].title = newTitle || acEntries[acIdx].title;
+    renderAcList();
+    update();
+    showToast('AC' + (acIdx + 1) + ' updated');
+    el.closest('.ai-rewrite-field').style.opacity = '0.5';
+  }
+
+  function applyAcNew(dataId, title) {
+    var el = document.getElementById('rw-' + dataId);
+    if (!el) return;
+    addAc(title || ('Scenario ' + (acEntries.length + 1)), el.textContent, false);
+    renderAcList();
+    update();
+    showToast('AC added');
+    el.closest('.ai-rewrite-field').style.opacity = '0.5';
   }
 
   function dismissRewrite() {
